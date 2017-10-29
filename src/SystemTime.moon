@@ -40,9 +40,11 @@ class SystemTime extends UIElement
 	redraw: =>
 		if @active
 			systemTime = os.time!
+			timeRemaining = math.floor mp.get_property_number 'playtime-remaining', 0
+			finishTime = systemTime + timeRemaining
 			if systemTime != @lastTime
 				update = true
-				@line[4] = os.date timeFormat, systemTime
+				@line[4] = ([[%s - %s]])\format os.date(time_format, systemTime), os.date(time_format, finishTime)
 				@lastTime = systemTime
 				@needsUpdate = true
 
