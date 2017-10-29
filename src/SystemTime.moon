@@ -42,6 +42,7 @@ class SystemTime extends UIElement
 			systemTime = os.time!
 			timeRemaining = math.floor mp.get_property_number 'playtime-remaining', 0
 			finishTime = systemTime + timeRemaining
+			time_format = "%H:%M"
 			if systemTime != @lastTime
 				update = true
 				@line[4] = ([[%s - %s]])\format os.date(time_format, systemTime), os.date(time_format, finishTime)
