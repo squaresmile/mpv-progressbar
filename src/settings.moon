@@ -53,7 +53,7 @@ Controls whether or not the progress bar is drawn at all. If this is disabled,
 it also (naturally) disables the click-to-seek functionality.
 ]]
 
-settings['bar-hide-inactive'] = false
+settings['bar-hide-inactive'] = true
 helpText['bar-hide-inactive'] = [[
 Causes the bar to not be drawn unless the mouse is hovering over it or a
 request-display call is active. This is somewhat redundant with setting bar-
