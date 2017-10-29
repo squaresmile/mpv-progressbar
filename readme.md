@@ -50,9 +50,9 @@ You must have [moonscript][moonscript] installed (particularly `moonc`,
 the compiler) and GNUMake compatible make. Run `make` from the root of
 the repository.
 
-[normal]: https://github.com/torque/mpv-progressbar/raw/images/normal.png
-[conf-example]: https://github.com/torque/mpv-progressbar/blob/master/torque-progressbar.conf
-[hover]: https://github.com/torque/mpv-progressbar/raw/images/hover.png
-[build]: https://raw.githubusercontent.com/torque/mpv-progressbar/build/progressbar.lua
+[normal]: https://github.com/squaresmile/mpv-progressbar/raw/images/normal.png
+[conf-example]: https://github.com/squaresmile/mpv-progressbar/blob/master/torque-progressbar.conf
+[hover]: https://github.com/squaresmile/mpv-progressbar/raw/images/hover.png
+[build]: https://raw.githubusercontent.com/squaresmile/mpv-progressbar/build/progressbar.lua
 [mpv]: http://mpv.io
 [moonscript]: http://moonscript.org
