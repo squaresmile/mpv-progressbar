@@ -168,7 +168,7 @@ settings['enable-bar'] = true
 helpText['enable-bar'] = [[Controls whether or not the progress bar is drawn at all. If this is disabled,
 it also (naturally) disables the click-to-seek functionality.
 ]]
-settings['bar-hide-inactive'] = false
+settings['bar-hide-inactive'] = true
 helpText['bar-hide-inactive'] = [[Causes the bar to not be drawn unless the mouse is hovering over it or a
 request-display call is active. This is somewhat redundant with setting bar-
 height-inactive=0, except that it can allow for very rudimentary context-
@@ -1234,20 +1234,27 @@ do
     reconfigure = function(self)
       _class_0.__parent.__base.reconfigure(self)
       seekString = ('absolute-percent+%s'):format(settings['seek-precision'])
-      self.barWidth = settings['progress-bar-width']
+      self.barShift = settings['progress-bar-width'] / 2.0
+      self:resize()
       self.line[7] = [[]]
       self.line[8] = self.line[8]:format(settings['bar-foreground-style'])
     end,
     clickHandler = function(self)
       return mp.commandv("seek", Mouse.clickX * 100 / Window.w, seekString)
     end,
+    resize = function(self)
+      _class_0.__parent.__base.resize(self)
+      if self.barShift > 0 then
+        self.line[2] = ('%g,%g'):format(self.barShift, Window.h)
+      end
+    end,
     redraw = function(self)
       _class_0.__parent.__base.redraw(self)
       local position = mp.get_property_number('percent-pos', 0)
       if position ~= self.lastPosition or self.needsUpdate then
         self.line[6] = position
-        if self.barWidth > 0 then
-          local followingEdge = Window.w * position * 1e-2 - self.barWidth
+        if self.barShift > 0 then
+          local followingEdge = Window.w * position * 1e-2 - self.barShift
           self.line[7] = ([[\clip(m %g 0 l %g 0 %g %g %g %g)]]):format(followingEdge, Window.w, Window.w, Window.h, followingEdge, Window.h)
         end
         self.lastPosition = position
@@ -2074,6 +2081,7 @@ do
         local systemTime = os.time()
         local timeRemaining = math.floor(mp.get_property_number('playtime-remaining', 0))
         local finishTime = systemTime + timeRemaining
+        local time_format = "%H:%M"
         if systemTime ~= self.lastTime then
           local update = true
           self.line[4] = ([[%s - %s]]):format(os.date(time_format, systemTime), os.date(time_format, finishTime))
