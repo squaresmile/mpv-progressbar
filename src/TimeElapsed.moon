@@ -38,9 +38,10 @@ class TimeElapsed extends BarAccent
 		if @active
 			super!
 			timeElapsed = math.floor mp.get_property_number 'time-pos', 0
+			fileDuration = math.floor mp.get_property_number 'duration', 0
 			if timeElapsed != @lastTime
 				update = true
-				@line[4] = ('%d:%02d:%02d')\format math.floor( timeElapsed/3600 ), math.floor( (timeElapsed/60)%60 ), math.floor( timeElapsed%60 )
+				@line[4] = ('%d:%02d:%02d / %d:%02d:%02d')\format math.floor( timeElapsed/3600 ), math.floor( (timeElapsed/60)%60 ), math.floor( timeElapsed%60 ), math.floor( fileDuration/3600 ), math.floor( (fileDuration/60)%60 ), math.floor( fileDuration%60 )
 				@lastTime = timeElapsed
 				@needsUpdate = true
 
