@@ -281,7 +281,7 @@ number of chapters may slow down the script somewhat, but I have yet to run
 into this being a problem.
 ]]
 
-settings['chapter-marker-width'] = 2
+settings['chapter-marker-width'] = 0
 helpText['chapter-marker-width'] = [[
 Controls the width of each chapter marker when the progress bar is inactive.
 ]]
