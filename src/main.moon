@@ -25,15 +25,23 @@ topZone = ActivityZone =>
 local chapters, progressBar, barCache, barBackground, elapsedTime, remainingTime, hoverTime
 
 if settings['enable-bar']
+	-- this order is recorded and (ab)used by BarBase and
+	-- ProgressBarBackground
 	progressBar = ProgressBar!
 	barCache = ProgressBarCache!
 	barBackground = ProgressBarBackground!
 	bottomZone\addUIElement barBackground
-	bottomZone\addUIElement barCache
-	bottomZone\addUIElement progressBar
+
+	-- this is not runtime reconfigurable, currently
+	if settings['bar-cache-position'] == 'overlay'
+		bottomZone\addUIElement progressBar
+		bottomZone\addUIElement barCache
+	else
+		bottomZone\addUIElement barCache
+		bottomZone\addUIElement progressBar
 
 	mp.add_key_binding "c", "toggle-inactive-bar", ->
-		BarBase.toggleInactiveVisibility!
+		BarBase\toggleInactiveVisibility!
 
 if settings['enable-chapter-markers']
 	chapters = Chapters!
@@ -93,12 +101,12 @@ if settings['pause-indicator']
 
 streamMode = false
 initDraw = ->
-	mp.unregister_event initDraw
 	-- this forces sizing activityzones and ui elements
 	if chapters
 		chapters\createMarkers!
 	if title
-		title\updatePlaylistInfo!
+		title\_forceUpdatePlaylistInfo!
+		title\print!
 	notFrameStepping = true
 	-- duration is nil for streams of indeterminate length
 	duration = mp.get_property 'duration'
@@ -134,7 +142,4 @@ initDraw = ->
 	eventLoop\resize!
 	eventLoop\redraw!
 
-fileLoaded = ->
-	mp.register_event 'playback-restart', initDraw
-
-mp.register_event 'file-loaded', fileLoaded
+mp.register_event 'file-loaded', initDraw
