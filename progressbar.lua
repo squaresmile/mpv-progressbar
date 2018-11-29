@@ -10,7 +10,6 @@ local log = {
     return msg.warn(format:format(...))
   end,
   dump = function(item, ignore)
-    local level = 2
     if "table" ~= type(item) then
       msg.info(tostring(item))
       return 
@@ -61,11 +60,11 @@ local utils = require('mp.utils')
 local script_name = 'torque-progressbar'
 mp.get_osd_size = mp.get_osd_size or mp.get_screen_size
 local settings = {
-  __defaults = { }
+  _defaults = { }
 }
 local settingsMeta = {
-  __reload = function(self)
-    for key, value in pairs(self.__defaults) do
+  _reload = function(self)
+    for key, value in pairs(self._defaults) do
       settings[key] = value
     end
     options.read_options(self, script_name .. '/main')
@@ -74,57 +73,156 @@ local settingsMeta = {
       self['bar-height-inactive'] = 1
     end
   end,
-  __migrate = function(self)
-    local oldConfig = mp.find_config_file(('lua-settings/%s.conf'):format(script_name))
-    local newConfigFile = ('lua-settings/%s/main.conf'):format(script_name)
-    local newConfig = mp.find_config_file(newConfigFile)
-    if oldConfig and not newConfig then
-      local folder, _ = utils.split_path(oldConfig)
-      local configDir = utils.join_path(folder, script_name)
-      newConfig = utils.join_path(configDir, 'main.conf')
-      log.info(('Old configuration detected. Attempting to migrate %q -> %q'):format(oldConfig, newConfig))
-      local dirExists = mp.find_config_file(configDir)
-      if dirExists and not utils.readdir(configDir) then
-        log.warn(('Configuration migration failed. %q exists and does not appear to be a folder'):format(configDir))
-        return 
-      else
-        if not dirExists then
-          local res = utils.subprocess({
-            args = {
-              'mkdir',
-              configDir
-            }
-          })
-          if res.error or res.status ~= 0 then
-            log.warn(('Making directory %q failed.'):format(configDir))
-            return 
-          end
-        end
-      end
-      local res = utils.subprocess({
+  _migrate = function(self)
+    local pathSep = package.config:sub(1, 1)
+    local onWindows = pathSep == '\\'
+    local mv
+    mv = function(oldFile, newFile)
+      local cmd = {
         args = {
           'mv',
           oldConfig,
           newConfig
         }
-      })
+      }
+      if onWindows then
+        local oldfile = oldFile:gsub('/', pathSep)
+        newFile = newFile:gsub('/', pathSep)
+        cmd = {
+          args = {
+            'cmd',
+            '/Q',
+            '/C',
+            'move',
+            '/Y',
+            oldfile,
+            newFile
+          }
+        }
+      end
+      return utils.subprocess(cmd)
+    end
+    local mkdir
+    mkdir = function(directory)
+      local cmd = {
+        args = {
+          'mkdir',
+          '-p',
+          directory
+        }
+      }
+      if onWindows then
+        directory = directory:gsub('/', pathSep)
+        cmd = {
+          args = {
+            'cmd',
+            '/Q',
+            '/C',
+            'mkdir',
+            directory
+          }
+        }
+      end
+      return utils.subprocess(cmd)
+    end
+    local settingsDirectories = {
+      'script-opts',
+      'lua-settings'
+    }
+    local oldConfigFiles
+    do
+      local _accum_0 = { }
+      local _len_0 = 1
+      for _index_0 = 1, #settingsDirectories do
+        local dir = settingsDirectories[_index_0]
+        _accum_0[_len_0] = ('%s/%s.conf'):format(dir, script_name)
+        _len_0 = _len_0 + 1
+      end
+      oldConfigFiles = _accum_0
+    end
+    local newConfigFiles
+    do
+      local _accum_0 = { }
+      local _len_0 = 1
+      for _index_0 = 1, #settingsDirectories do
+        local dir = settingsDirectories[_index_0]
+        _accum_0[_len_0] = ('%s/%s/main.conf'):format(dir, script_name)
+        _len_0 = _len_0 + 1
+      end
+      newConfigFiles = _accum_0
+    end
+    local oldConfig = nil
+    local oldConfigIndex = 1
+    local newConfigFile = nil
+    local newConfig = nil
+    for idx, file in ipairs(oldConfigFiles) do
+      log.debug(('checking for old config "%s"'):format(file))
+      oldConfig = mp.find_config_file(file)
+      if oldConfig then
+        log.debug(('found "%s"'):format(oldConfig))
+        oldConfigIndex = idx
+        break
+      end
+    end
+    if not (oldConfig) then
+      log.debug('No old config file found. Migration finished.')
+      return 
+    end
+    for _index_0 = 1, #newConfigFiles do
+      local file = newConfigFiles[_index_0]
+      log.debug(('checking for new config "%s"'):format(file))
+      newConfig = mp.find_config_file(file)
+      if newConfig then
+        log.debug(('found "%s"'):format(newConfig))
+        newConfigFile = file
+        break
+      end
+    end
+    if oldConfig and not newConfig then
+      log.debug(('Found "%s". Processing migration.'):format(oldConfig))
+      newConfigFile = newConfigFiles[oldConfigIndex]
+      local baseConfigFolder, _ = utils.split_path(oldConfig)
+      local configDir = utils.join_path(baseConfigFolder, script_name)
+      newConfig = utils.join_path(configDir, 'main.conf')
+      log.info(('Old configuration detected. Attempting to migrate "%s" -> "%s"'):format(oldConfig, newConfig))
+      local dirExists = mp.find_config_file(configDir)
+      if dirExists and not utils.readdir(configDir) then
+        log.warn(('Configuration migration failed. "%s" exists and does not appear to be a folder'):format(configDir))
+        return 
+      else
+        if not dirExists then
+          log.debug(('Attempting to create directory "%s"'):format(configDir))
+          local res = mkdir(configDir)
+          if res.error or res.status ~= 0 then
+            log.warn(('Making directory "%s" failed.'):format(configDir))
+            return 
+          end
+          log.debug('successfully created directory.')
+        else
+          log.debug(('Directory "%s" already exists. Continuing.'):format(configDir))
+        end
+      end
+      log.debug(('Attempting to move "%s" -> "%s"'):format(oldConfig, newConfig))
+      local res = mv(oldConfig, newConfig)
       if res.error or res.status ~= 0 then
-        log.warn(('Moving file %q -> %q failed.'):format(oldConfig, newConfig))
+        log.warn(('Moving file "%s" -> "%s" failed.'):format(oldConfig, newConfig))
         return 
       end
       if mp.find_config_file(newConfigFile) then
         return log.info('Configuration successfully migrated.')
+      else
+        return log.warn(('Cannot find "%s". Migration mysteriously failed?'):format(newConfigFile))
       end
     end
   end,
   __newindex = function(self, key, value)
-    self.__defaults[key] = value
+    self._defaults[key] = value
     return rawset(self, key, value)
   end
 }
 settingsMeta.__index = settingsMeta
 setmetatable(settings, settingsMeta)
-settings:__migrate()
+settings:_migrate()
 local helpText = { }
 settings['hover-zone-height'] = 40
 helpText['hover-zone-height'] = [[Sets the height of the rectangular area at the bottom of the screen that expands
@@ -177,7 +275,7 @@ the binding `f cycle pause; script-binding progressbar/toggle-inactive-bar`, it
 is possible to have the bar be persistently present only in windowed or
 fullscreen contexts, depending on the default setting.
 ]]
-settings['bar-height-inactive'] = 2
+settings['bar-height-inactive'] = 3
 helpText['bar-height-inactive'] = [[Sets the height of the bar display when the mouse is not in the active zone and
 there is no request-display active. A value of 0 or less will cause bar-hide-
 inactive to be set to true and the bar height to be set to 1. This should result
@@ -202,6 +300,34 @@ Actually, this gets passed directly into the `seek` command, so the value can be
 any of the arguments supported by mpv, though the ones above are the only ones
 that really make sense.
 ]]
+settings['bar-background-adaptive'] = true
+helpText['bar-background-adaptive'] = [[Causes the progress bar background layer to automatically size itself to the
+tallest of the cache or progress bars. Useful for improving contrast but can
+make the bar take up more screen space. Has no effect if the cache bar height is
+less than the bar height.
+]]
+settings['bar-cache-position'] = 'overlay'
+helpText['bar-cache-position'] = [[Placement of the cache bar. Valid values are 'overlay' and 'underlay'.
+
+'overlay' causes the cache bar to be drawn on top of the foreground layer of the
+bar, allowing the display of seek ranges that have already been encountered.
+
+'underlay' draws the cache bar between the foreground and background layers. Any
+demuxer cache ranges that are prior to the current playback point will not be
+shown. This matches the previous behavior.
+]]
+settings['bar-cache-height-inactive'] = 1.5
+helpText['bar-cache-height-inactive'] = [[Sets the height of the cache bar display when the mouse is not in the active
+zone and there is no request-display active. Useful in combination with bar-
+cache-position to control whether or not the cache bar is occluded by (or
+occludes) the progress bar.
+]]
+settings['bar-cache-height-active'] = 4
+helpText['bar-cache-height-active'] = [[Sets the height of the cache bar display when the mouse is in the active zone or
+request-display is active. Useful in combination with bar-cache- position to
+control whether or not the cache bar is occluded by (or occludes) the progress
+bar.
+]]
 settings['bar-default-style'] = [[\bord0\shad0]]
 helpText['bar-default-style'] = [[A string of ASS override tags that get applied to all three layers of the bar:
 progress, cache, and background. You probably don't want to remove \bord0 unless
@@ -213,7 +339,16 @@ bar.
 ]]
 settings['bar-cache-style'] = [[\c&H515151&]]
 helpText['bar-cache-style'] = [[A string of ASS override tags that get applied only to the cache layer of the
-bar. The default sets only the color.
+bar, particularly the part of the cache bar that is behind the current playback
+position. The default sets only the color.
+]]
+settings['bar-cache-background-style'] = [[]]
+helpText['bar-cache-background-style'] = [[A string of ASS override tags that get applied only to the cache layer of the
+bar, particularly the part of the cache bar that is after the current playback
+position. The tags specified here are applied after bar-cache-style and override
+them. Leaving this blank will leave the style the same as specified by bar-
+cache-style. The split does not account for a nonzero progress-bar-width and may
+look odd when used in tandem with that setting.
 ]]
 settings['bar-background-style'] = [[\c&H2D2D2D&]]
 helpText['bar-background-style'] = [[A string of ASS override tags that get applied only to the background layer of
@@ -325,7 +460,7 @@ the way the chapter markers are currently implemented, videos with a large
 number of chapters may slow down the script somewhat, but I have yet to run
 into this being a problem.
 ]]
-settings['chapter-marker-width'] = 2
+settings['chapter-marker-width'] = 0
 helpText['chapter-marker-width'] = [[Controls the width of each chapter marker when the progress bar is inactive.
 ]]
 settings['chapter-marker-width-active'] = 4
@@ -395,7 +530,7 @@ to be tweaked. If this value is not far enough off-screen, the elapsed display
 will disappear without animating all the way off-screen. Positive values will
 cause the display to animate the wrong direction.
 ]]
-settings:__reload()
+settings:_reload()
 local Stack
 do
   local _class_0
@@ -796,7 +931,7 @@ do
   local _class_0
   local _base_0 = {
     reconfigure = function(self)
-      settings:__reload()
+      settings:_reload()
       AnimationQueue.destroyAnimationStack()
       for _, zone in ipairs(self.activityZones) do
         zone:reconfigure()
@@ -1116,20 +1251,26 @@ end
 local BarBase
 do
   local _class_0
-  local minHeight, hideInactive, lineBaseTemplate
+  local hideInactive, lineBaseTemplate
   local _parent_0 = UIElement
   local _base_0 = {
-    reconfigure = function(self)
-      _class_0.__parent.__base.reconfigure(self)
-      minHeight = settings['bar-height-inactive'] * 100
-      self.__class.maxHeight = settings['bar-height-active'] * 100
-      hideInactive = settings['bar-hide-inactive']
+    _updateBarVisibility = function(self)
       if hideInactive then
-        self.__class.animationMinHeight = 0
+        self.animationMinHeight = 0
       else
-        self.__class.animationMinHeight = minHeight
+        self.animationMinHeight = self.minHeight
       end
-      self.line[4] = minHeight
+    end,
+    reconfigure = function(self, prefix)
+      if prefix == nil then
+        prefix = 'bar-'
+      end
+      _class_0.__parent.__base.reconfigure(self)
+      self.minHeight = settings[prefix .. 'height-inactive'] * 100
+      self.maxHeight = settings[prefix .. 'height-active'] * 100
+      hideInactive = settings['bar-hide-inactive']
+      self:_updateBarVisibility()
+      self.line[4] = self.minHeight
       self.line[8] = lineBaseTemplate:format(settings['default-style'], settings['bar-default-style'], '%s')
       self.animation = Animation(0, 1, self.animationDuration, (function()
         local _base_1 = self
@@ -1149,11 +1290,11 @@ do
     end,
     resize = function(self)
       self.line[2] = ([[%d,%d]]):format(0, Window.h)
-      self.line[9] = ([[%d 0 %d 1 0 1]]):format(Window.w, Window.w)
+      self.line[9] = ([[m 0 0 l %d 0 %d 1 0 1]]):format(Window.w, Window.w)
       self.needsUpdate = true
     end,
     animate = function(self, value)
-      self.line[4] = ([[%g]]):format((self.__class.maxHeight - self.__class.animationMinHeight) * value + self.__class.animationMinHeight, value)
+      self.line[4] = ([[%g]]):format((self.maxHeight - self.animationMinHeight) * value + self.animationMinHeight)
       self.needsUpdate = true
     end,
     redraw = function(self)
@@ -1170,6 +1311,9 @@ do
   setmetatable(_base_0, _parent_0.__base)
   _class_0 = setmetatable({
     __init = function(self)
+      self.minHeight = settings['bar-height-inactive'] * 100
+      self.animationMinHeight = minHeight
+      self.maxHeight = settings['bar-height-active'] * 100
       self.line = {
         [[{\pos(]],
         0,
@@ -1182,6 +1326,7 @@ do
         0
       }
       _class_0.__parent.__init(self)
+      table.insert(self.__class.instantiatedBars, self)
       return self:reconfigure()
     end,
     __base = _base_0,
@@ -1207,19 +1352,17 @@ do
   })
   _base_0.__class = _class_0
   local self = _class_0
-  minHeight = settings['bar-height-inactive'] * 100
-  self.__class.animationMinHeight = minHeight
-  self.__class.maxHeight = settings['bar-height-active'] * 100
   hideInactive = settings['bar-hide-inactive']
-  self.toggleInactiveVisibility = function()
+  self.instantiatedBars = { }
+  self.toggleInactiveVisibility = function(self)
     hideInactive = not hideInactive
-    if hideInactive then
-      BarBase.animationMinHeight = 0
-    else
-      BarBase.animationMinHeight = minHeight
+    local _list_0 = self.instantiatedBars
+    for _index_0 = 1, #_list_0 do
+      local bar = _list_0[_index_0]
+      bar:_updateBarVisibility()
     end
   end
-  lineBaseTemplate = [[\an1%s%s%s\p1}m 0 0 l ]]
+  lineBaseTemplate = [[\an1%s%s%s\p1}]]
   if _parent_0.__inherited then
     _parent_0.__inherited(_parent_0, _class_0)
   end
@@ -1302,31 +1445,60 @@ end
 local ProgressBarCache
 do
   local _class_0
+  local timestamp
   local _parent_0 = BarBase
   local _base_0 = {
     reconfigure = function(self)
-      _class_0.__parent.__base.reconfigure(self)
-      self.line[8] = self.line[8]:format(settings['bar-cache-style'])
+      _class_0.__parent.__base.reconfigure(self, 'bar-cache-')
+      self.line[6] = 100
+      self.line[8] = self.line[8]:format(settings['bar-cache-style']) .. 'm 0 0'
+      self.line[10] = ([[{\p0%s\p1}]]):format(settings['bar-cache-background-style'])
+      self.line[11] = [[]]
+      self.fileDuration = mp.get_property_number('duration', nil)
+    end,
+    resize = function(self)
+      _class_0.__parent.__base.resize(self)
+      if self.fileDuration then
+        self.coordinateRemap = Window.w / self.fileDuration
+      end
     end,
     redraw = function(self)
       _class_0.__parent.__base.redraw(self)
-      local totalSize = mp.get_property_number('file-size', 0)
-      if totalSize ~= 0 then
-        local position = mp.get_property_number('percent-pos', 0.001)
-        local cacheUsed = mp.get_property_number('cache-used', 0) * 1024
-        local networkCacheContribution = cacheUsed / totalSize
-        local demuxerCache = mp.get_property('demuxer-cache-state/cache-end', nil)
-        local fileDuration = mp.get_property_number('duration', 0.001)
-        local demuxerCacheContribution = 0
-        if demuxerCache then
-          local currentTime = mp.get_property_number('time-pos', 0)
-          demuxerCacheContribution = (demuxerCache - currentTime) / fileDuration
-        else
-          local demuxerCacheDuration = mp.get_property_number('demuxer-cache-duration', 0)
-          demuxerCacheContribution = demuxerCacheDuration / fileDuration
+      if self.fileDuration and (self.fileDuration > 0) then
+        local barDrawing = {
+          past = { },
+          future = { }
+        }
+        local ranges
+        ranges = mp.get_property_native('demuxer-cache-state', { })['seekable-ranges']
+        if ranges then
+          local progressPosition = mp.get_property_number('percent-pos', 0) * Window.w * 0.01
+          for _index_0 = 1, #ranges do
+            local _des_0 = ranges[_index_0]
+            local rangeStart, rangeEnd
+            rangeStart, rangeEnd = _des_0.start, _des_0["end"]
+            rangeStart = rangeStart * self.coordinateRemap
+            rangeEnd = rangeEnd * self.coordinateRemap
+            if rangeEnd < progressPosition then
+              local rect = ('m %g 0 l %g 1 %g 1 %g 0'):format(rangeStart, rangeStart, rangeEnd, rangeEnd)
+              table.insert(barDrawing.past, rect)
+            elseif rangeStart > progressPosition then
+              rangeStart = rangeStart - progressPosition
+              rangeEnd = rangeEnd - progressPosition
+              local rect = ('m %g 0 l %g 1 %g 1 %g 0'):format(rangeStart, rangeStart, rangeEnd, rangeEnd)
+              table.insert(barDrawing.future, rect)
+            else
+              rangeEnd = rangeEnd - progressPosition
+              local rectPast = ('m %g 0 l %g 1 %g 1 %g 0'):format(rangeStart, rangeStart, progressPosition, progressPosition)
+              local rectFuture = ('m %g 0 l %g 1 %g 1 %g 0'):format(0, 0, rangeEnd, rangeEnd)
+              table.insert(barDrawing.past, rectPast)
+              table.insert(barDrawing.future, rectFuture)
+            end
+          end
+          self.line[9] = table.concat(barDrawing.past, ' ') .. ('m %g 0'):format(progressPosition)
+          self.line[11] = table.concat(barDrawing.future, ' ')
+          self.needsUpdate = true
         end
-        self.line[6] = (networkCacheContribution + demuxerCacheContribution) * 100 + position
-        self.needsUpdate = true
       end
       return self.needsUpdate
     end
@@ -1334,8 +1506,15 @@ do
   _base_0.__index = _base_0
   setmetatable(_base_0, _parent_0.__base)
   _class_0 = setmetatable({
-    __init = function(self, ...)
-      return _class_0.__parent.__init(self, ...)
+    __init = function(self)
+      _class_0.__parent.__init(self)
+      self.coordinateRemap = 0
+      return mp.observe_property('duration', 'number', function(name, value)
+        if value and (value > 0) then
+          self.fileDuration = value
+          self.coordinateRemap = Window.w / value
+        end
+      end)
     end,
     __base = _base_0,
     __name = "ProgressBarCache",
@@ -1359,6 +1538,8 @@ do
     end
   })
   _base_0.__class = _class_0
+  local self = _class_0
+  timestamp = os.time()
   if _parent_0.__inherited then
     _parent_0.__inherited(_parent_0, _class_0)
   end
@@ -1371,6 +1552,15 @@ do
   local _base_0 = {
     reconfigure = function(self)
       _class_0.__parent.__base.reconfigure(self)
+      if settings['bar-background-adaptive'] then
+        local _list_0 = self.__class.instantiatedBars
+        for _index_0 = 1, #_list_0 do
+          local bar = _list_0[_index_0]
+          self.minHeight = math.max(self.minHeight, bar.minHeight)
+          self.maxHeight = math.max(self.maxHeight, bar.maxHeight)
+        end
+        self:_updateBarVisibility()
+      end
       self.line[6] = 100
       self.line[8] = self.line[8]:format(settings['bar-background-style'])
     end
@@ -1486,7 +1676,7 @@ do
       self.markers = { }
       local totalTime = mp.get_property_number('duration', 0.01)
       local chapters = mp.get_property_native('chapter-list', { })
-      local markerHeight = self.active and maxHeight * maxHeightFrac or BarBase.animationMinHeight
+      local markerHeight = self.active and maxHeight * maxHeightFrac or BarBase.instantiatedBars[1].animationMinHeight
       local markerWidth = self.active and maxWidth or minWidth
       for _index_0 = 1, #chapters do
         local chapter = chapters[_index_0]
@@ -1521,7 +1711,7 @@ do
     end,
     animate = function(self, value)
       local width = (maxWidth - minWidth) * value + minWidth
-      local height = (maxHeight * maxHeightFrac - BarBase.animationMinHeight) * value + BarBase.animationMinHeight
+      local height = (maxHeight * maxHeightFrac - BarBase.instantiatedBars[1].animationMinHeight) * value + BarBase.instantiatedBars[1].animationMinHeight
       for i, marker in ipairs(self.markers) do
         marker:animate(width, height)
         self.line[i] = marker:stringify()
@@ -1621,9 +1811,10 @@ do
       if self.active then
         _class_0.__parent.__base.redraw(self)
         local timeElapsed = math.floor(mp.get_property_number('time-pos', 0))
+        local fileDuration = math.floor(mp.get_property_number('duration', 0))
         if timeElapsed ~= self.lastTime then
           local update = true
-          self.line[4] = ('%d:%02d:%02d'):format(math.floor(timeElapsed / 3600), math.floor((timeElapsed / 60) % 60), math.floor(timeElapsed % 60))
+          self.line[4] = ('%d:%02d:%02d / %d:%02d:%02d'):format(math.floor(timeElapsed / 3600), math.floor((timeElapsed / 60) % 60), math.floor(timeElapsed % 60), math.floor(fileDuration / 3600), math.floor((fileDuration / 60) % 60), math.floor(fileDuration % 60))
           self.lastTime = timeElapsed
           self.needsUpdate = true
         end
@@ -1986,16 +2177,40 @@ do
       self.line[2] = ('%g,%g'):format(settings['title-left-margin'], value)
       self.needsUpdate = true
     end,
-    updatePlaylistInfo = function(self)
-      local title = mp.get_property('media-title', '')
-      local position = mp.get_property_number('playlist-pos-1', 1)
-      local total = mp.get_property_number('playlist-count', 1)
-      local playlistString = (total > 1) and ('%d/%d - '):format(position, total) or ''
-      if settings['title-print-to-cli'] then
-        log.warn("Playing: %s%q", playlistString, title)
+    _forceUpdatePlaylistInfo = function(self)
+      self.playlistInfo = {
+        ['media-title'] = mp.get_property('media-title', '????'),
+        ['playlist-pos-1'] = mp.get_property_number('playlist-pos-1', 1),
+        ['playlist-count'] = mp.get_property_number('playlist-count', 1)
+      }
+    end,
+    generateTitleString = function(self, quote)
+      if quote == nil then
+        quote = false
       end
-      self.line[4] = ('%s%s'):format(playlistString, title)
-      self.needsUpdate = true
+      local title, position, total
+      do
+        local _obj_0 = self.playlistInfo
+        title, position, total = _obj_0['media-title'], _obj_0['playlist-pos-1'], _obj_0['playlist-count']
+      end
+      local prefix = (total > 1) and ('%d/%d - '):format(position, total) or ''
+      if quote then
+        return prefix .. ('%q'):format(title)
+      else
+        return prefix .. title
+      end
+    end,
+    updatePlaylistInfo = function(self, changedProp, newValue)
+      if newValue then
+        self.playlistInfo[changedProp] = newValue
+        self.line[4] = self:generateTitleString()
+        self.needsUpdate = true
+      end
+    end,
+    print = function(self)
+      if settings['title-print-to-cli'] then
+        return log.warn("Playing: " .. self:generateTitleString(true))
+      end
     end
   }
   _base_0.__index = _base_0
@@ -2018,6 +2233,18 @@ do
           return _fn_0(_base_1, ...)
         end
       end)(), nil, 0.5)
+      self:_forceUpdatePlaylistInfo()
+      local updatePlaylistInfo
+      do
+        local _base_1 = self
+        local _fn_0 = _base_1.updatePlaylistInfo
+        updatePlaylistInfo = function(...)
+          return _fn_0(_base_1, ...)
+        end
+      end
+      mp.observe_property('media-title', 'string', updatePlaylistInfo)
+      mp.observe_property('playlist-pos-1', 'number', updatePlaylistInfo)
+      return mp.observe_property('playlist-count', 'number', updatePlaylistInfo)
     end,
     __base = _base_0,
     __name = "Title",
@@ -2171,10 +2398,15 @@ if settings['enable-bar'] then
   barCache = ProgressBarCache()
   barBackground = ProgressBarBackground()
   bottomZone:addUIElement(barBackground)
-  bottomZone:addUIElement(barCache)
-  bottomZone:addUIElement(progressBar)
+  if settings['bar-cache-position'] == 'overlay' then
+    bottomZone:addUIElement(progressBar)
+    bottomZone:addUIElement(barCache)
+  else
+    bottomZone:addUIElement(barCache)
+    bottomZone:addUIElement(progressBar)
+  end
   mp.add_key_binding("c", "toggle-inactive-bar", function()
-    return BarBase.toggleInactiveVisibility()
+    return BarBase:toggleInactiveVisibility()
   end)
 end
 if settings['enable-chapter-markers'] then
@@ -2234,12 +2466,12 @@ end
 local streamMode = false
 local initDraw
 initDraw = function()
-  mp.unregister_event(initDraw)
   if chapters then
     chapters:createMarkers()
   end
   if title then
-    title:updatePlaylistInfo()
+    title:_forceUpdatePlaylistInfo()
+    title:print()
   end
   notFrameStepping = true
   local duration = mp.get_property('duration')
@@ -2283,8 +2515,4 @@ initDraw = function()
   eventLoop:resize()
   return eventLoop:redraw()
 end
-local fileLoaded
-fileLoaded = function()
-  return mp.register_event('playback-restart', initDraw)
-end
-return mp.register_event('file-loaded', fileLoaded)
+return mp.register_event('file-loaded', initDraw)
