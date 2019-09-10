@@ -45,7 +45,7 @@ class SystemTime extends UIElement
 			time_format = "%H:%M"
 			if systemTime != @lastTime
 				update = true
-				@line[4] = ([[%s - %s]])\format os.date(time_format, systemTime), os.date(time_format, finishTime)
+				@line[4] = ([[%s–%s]])\format os.date(time_format, systemTime), os.date(time_format, finishTime)
 				@lastTime = systemTime
 				@needsUpdate = true
 
