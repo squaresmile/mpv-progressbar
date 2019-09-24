@@ -392,7 +392,7 @@ helpText['hover-time-style'] = [[A string of ASS override tags that get applied 
 Unfortunately, due to the way the hover time display is animated, alpha values
 set here will be overridden. This is subject to change in future versions.
 ]]
-settings['hover-time-left-margin'] = 120
+settings['hover-time-left-margin'] = 215
 helpText['hover-time-left-margin'] = [[Controls how close to the left edge of the window the hover time display can
 get. If this value is too small, it will end up overlapping the elapsed time
 display.
@@ -2311,7 +2311,7 @@ do
         local time_format = "%H:%M"
         if systemTime ~= self.lastTime then
           local update = true
-          self.line[4] = ([[%s - %s]]):format(os.date(time_format, systemTime), os.date(time_format, finishTime))
+          self.line[4] = ([[%s–%s]]):format(os.date(time_format, systemTime), os.date(time_format, finishTime))
           self.lastTime = systemTime
           self.needsUpdate = true
         end
